@@ -55,7 +55,7 @@ typedef std::shared_ptr<std::vector<unsigned char>> FileContents;
 #define ElfFileParamNames Elf_Ehdr, Elf_Phdr, Elf_Shdr, Elf_Addr, Elf_Off, Elf_Dyn, Elf_Sym, Elf_Verneed
 
 
-static std::vector<std::string> splitColonDelimitedString(const char * s)
+std::vector<std::string> splitColonDelimitedString(const char * s)
 {
     std::vector<std::string> parts;
     const char * pos = s;
@@ -296,7 +296,7 @@ struct SysError : std::runtime_error
 };
 
 
-__attribute__((noreturn)) static void error(std::string msg)
+__attribute__((noreturn)) void error(std::string msg)
 {
     if (errno)
         throw SysError(msg);
@@ -1607,7 +1607,7 @@ static void patchElf2(ElfFile && elfFile, std::string fileName)
 }
 
 
-static void patchElf()
+void patchElf()
 {
     for (auto fileName : fileNames) {
         if (!printInterpreter && !printRPath && !printSoname && !printNeeded)
@@ -1621,147 +1621,5 @@ static void patchElf()
             patchElf2(ElfFile<Elf32_Ehdr, Elf32_Phdr, Elf32_Shdr, Elf32_Addr, Elf32_Off, Elf32_Dyn, Elf32_Sym, Elf32_Verneed>(fileContents), fileName);
         else
             patchElf2(ElfFile<Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr, Elf64_Addr, Elf64_Off, Elf64_Dyn, Elf64_Sym, Elf64_Verneed>(fileContents), fileName);
-    }
-}
-
-
-void showHelp(const std::string & progName)
-{
-        fprintf(stderr, "syntax: %s\n\
-  [--set-interpreter FILENAME]\n\
-  [--page-size SIZE]\n\
-  [--print-interpreter]\n\
-  [--print-soname]\t\tPrints 'DT_SONAME' entry of .dynamic section. Raises an error if DT_SONAME doesn't exist\n\
-  [--set-soname SONAME]\t\tSets 'DT_SONAME' entry to SONAME.\n\
-  [--set-rpath RPATH]\n\
-  [--remove-rpath]\n\
-  [--shrink-rpath]\n\
-  [--allowed-rpath-prefixes PREFIXES]\t\tWith '--shrink-rpath', reject rpath entries not starting with the allowed prefix\n\
-  [--print-rpath]\n\
-  [--force-rpath]\n\
-  [--add-needed LIBRARY]\n\
-  [--remove-needed LIBRARY]\n\
-  [--replace-needed LIBRARY NEW_LIBRARY]\n\
-  [--print-needed]\n\
-  [--no-default-lib]\n\
-  [--debug]\n\
-  [--version]\n\
-  FILENAME\n", progName.c_str());
-}
-
-
-int mainWrapped(int argc, char * * argv)
-{
-    if (argc <= 1) {
-        showHelp(argv[0]);
-        return 1;
-    }
-
-    if (getenv("PATCHELF_DEBUG") != 0) debugMode = true;
-
-    int i;
-    for (i = 1; i < argc; ++i) {
-        std::string arg(argv[i]);
-        if (arg == "--set-interpreter" || arg == "--interpreter") {
-            if (++i == argc) error("missing argument");
-            newInterpreter = argv[i];
-        }
-        else if (arg == "--page-size") {
-            if (++i == argc) error("missing argument");
-            pageSize = atoi(argv[i]);
-            if (pageSize <= 0) error("invalid argument to --page-size");
-        }
-        else if (arg == "--print-interpreter") {
-            printInterpreter = true;
-        }
-        else if (arg == "--print-soname") {
-            printSoname = true;
-        }
-        else if (arg == "--set-soname") {
-            if (++i == argc) error("missing argument");
-            setSoname = true;
-            newSoname = argv[i];
-        }
-        else if (arg == "--remove-rpath") {
-            removeRPath = true;
-        }
-        else if (arg == "--shrink-rpath") {
-            shrinkRPath = true;
-        }
-        else if (arg == "--allowed-rpath-prefixes") {
-            if (++i == argc) error("missing argument");
-            allowedRpathPrefixes = splitColonDelimitedString(argv[i]);
-        }
-        else if (arg == "--set-rpath") {
-            if (++i == argc) error("missing argument");
-            setRPath = true;
-            newRPath = argv[i];
-        }
-        else if (arg == "--print-rpath") {
-            printRPath = true;
-        }
-        else if (arg == "--force-rpath") {
-            /* Generally we prefer to emit DT_RUNPATH instead of
-               DT_RPATH, as the latter is obsolete.  However, there is
-               a slight semantic difference: DT_RUNPATH is "scoped",
-               it only affects the executable or library in question,
-               not its recursive imports.  So maybe you really want to
-               force the use of DT_RPATH.  That's what this option
-               does.  Without it, DT_RPATH (if encountered) is
-               converted to DT_RUNPATH, and if neither is present, a
-               DT_RUNPATH is added.  With it, DT_RPATH isn't converted
-               to DT_RUNPATH, and if neither is present, a DT_RPATH is
-               added. */
-            forceRPath = true;
-        }
-        else if (arg == "--print-needed") {
-            printNeeded = true;
-        }
-        else if (arg == "--add-needed") {
-            if (++i == argc) error("missing argument");
-            neededLibsToAdd.insert(argv[i]);
-        }
-        else if (arg == "--remove-needed") {
-            if (++i == argc) error("missing argument");
-            neededLibsToRemove.insert(argv[i]);
-        }
-        else if (arg == "--replace-needed") {
-            if (i+2 >= argc) error("missing argument(s)");
-            neededLibsToReplace[ argv[i+1] ] = argv[i+2];
-            i += 2;
-        }
-        else if (arg == "--debug") {
-            debugMode = true;
-        }
-        else if (arg == "--no-default-lib") {
-            noDefaultLib = true;
-        }
-        else if (arg == "--help" || arg == "-h" ) {
-            showHelp(argv[0]);
-            return 0;
-        }
-        else if (arg == "--version") {
-            printf(PACKAGE_STRING "\n");
-            return 0;
-        }
-        else {
-            fileNames.push_back(arg);
-        }
-    }
-
-    if (fileNames.empty()) error("missing filename");
-
-    patchElf();
-
-    return 0;
-}
-
-int main(int argc, char * * argv)
-{
-    try {
-        return mainWrapped(argc, argv);
-    } catch (std::exception & e) {
-        fprintf(stderr, "patchelf: %s\n", e.what());
-        return 1;
     }
 }
